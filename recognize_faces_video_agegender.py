@@ -10,6 +10,22 @@ import cv2
 from PIL import Image
 import math
 import numpy as np
+from tensorflow import keras
+import tensorflow as tf
+from keras.backend.tensorflow_backend import set_session
+import emotionDet
+
+gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.7)
+config = tf.ConfigProto(gpu_options=gpu_options)
+config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
+config.log_device_placement = True  # to log device placement (on which device the operation ran)
+                                    # (nothing gets printed in Jupyter, only if you run it standalone)
+
+
+sess = tf.Session(config=config)
+set_session(sess)  # set this TensorFlow session as the default session for Keras
+
+
 
 # construct the argument parser and parse the arguments
 ap = argparse.ArgumentParser()
@@ -34,6 +50,10 @@ ageModel = "age_net.caffemodel"
 
 genderProto = "gender_deploy.prototxt"
 genderModel = "gender_net.caffemodel"
+
+emotionFile = '_mini_XCEPTION.75-0.63.hdf5'
+emotionNet = emotionDet.loadkeras(modelPath = emotionFile)
+
 
 MODEL_MEAN_VALUES = (78.4263377603, 87.7689143744, 114.895847746)
 ageList = ['(0-2)', '(4-6)', '(8-12)', '(15-20)', '(25-32)', '(38-43)', '(48-53)', '(60-100)']
@@ -105,6 +125,7 @@ while True:
 		bbox=[tbbox[3],tbbox[0],tbbox[1],tbbox[2]]
 		face = frame[max(0,bbox[1]-padding):min(bbox[3]+padding,frame.shape[0]-1),max(0,bbox[0]-padding):min(bbox[2]+padding, frame.shape[1]-1)]
 		blob = cv2.dnn.blobFromImage(face, 1.0, (227, 227), MODEL_MEAN_VALUES, swapRB=False)
+		# facearrs.append(face)
 
 		gender_pred_st_time = current_milli_time()
 		genderNet.setInput(blob)
@@ -119,8 +140,11 @@ while True:
 		age = ageList[agePreds[0].argmax()]
 		age_pred_time = current_milli_time() - age_pred_st_time
 
+		emotion_st_time = current_milli_time()
+		face_emotion = emotionDet.get_face_emotion(face, emotionNet)
+		emotion_pred_time = current_milli_time() - emotion_st_time
 
-		label = "Age:{}, {} \n Gender: {}, {}".format(age, str(age_pred_time), gender, str(gender_pred_time))
+		label = "{} | {} | {}".format(str((age, age_pred_time)), str((gender, gender_pred_time)), str((face_emotion, emotion_pred_time)))
 		#print(label)
 		agegender.append(label)
 
@@ -157,7 +181,7 @@ while True:
 			name = max(counts, key=counts.get)
 
 		# update the list of names
-		name = name + "\n" + agegender[index]
+		name = name + "\n" + agegender[index] # + " " + emotionLabel[index]
 		names.append(name)
 		index=index+1
 
@@ -167,7 +191,7 @@ while True:
 	info = "%s, %.2f ms" %( 'time', 1000*exec_time)
 
 	# for idx, info in enumerate(infos.split('\n')):
-	cv2.putText(frame, text=info, org=(50, 70), fontFace=cv2.FONT_HERSHEY_SIMPLEX,fontScale=0.4, color=(0, 255, 0), thickness=2)
+	cv2.putText(frame, text=info, org=(50, 70), fontFace=cv2.FONT_HERSHEY_SIMPLEX,fontScale=0.4, color=(0, 0, 0), thickness=2)
 
                 	# loop over the recognized faces
 	for ((top, right, bottom, left), name) in zip(boxes, names):
@@ -185,7 +209,7 @@ while True:
 		# 	cv2.putText(frame, val, (left, y-15*idx), cv2.FONT_HERSHEY_SIMPLEX,
 		# 		0.45, (0, 255, 0), 1)
 
-		cv2.putText(frame, name, (left, y), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 0), 1)
+		cv2.putText(frame, name, (left, y), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 0, 0), 2)
                 	# if the video writer is None *AND* we are supposed to write
 	# the output video to disk initialize the writer
 	if writer is None and args["output"] is not None:
